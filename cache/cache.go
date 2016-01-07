@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package cache provide a Cache interface and some implemetn engine
 // Usage:
 //
 // import(
@@ -36,7 +37,7 @@ import (
 
 // Cache interface contains all behaviors for cache adapter.
 // usage:
-//	cache.Register("file",cache.NewFileCache()) // this operation is run in init method of file.go.
+//	cache.Register("file",cache.NewFileCache) // this operation is run in init method of file.go.
 //	c,err := cache.NewCache("file","{....}")
 //	c.Put("key",value,3600)
 //	v := c.Get("key")
@@ -65,12 +66,14 @@ type Cache interface {
 	StartAndGC(config string) error
 }
 
-var adapters = make(map[string]Cache)
+type CacheInstance func() Cache
+
+var adapters = make(map[string]CacheInstance)
 
 // Register makes a cache adapter available by the adapter name.
 // If Register is called twice with the same name or if driver is nil,
 // it panics.
-func Register(name string, adapter Cache) {
+func Register(name string, adapter CacheInstance) {
 	if adapter == nil {
 		panic("cache: Register adapter is nil")
 	}
@@ -80,15 +83,16 @@ func Register(name string, adapter Cache) {
 	adapters[name] = adapter
 }
 
-// Create a new cache driver by adapter name and config string.
+// NewCache Create a new cache driver by adapter name and config string.
 // config need to be correct JSON as string: {"interval":360}.
 // it will start gc automatically.
 func NewCache(adapterName, config string) (adapter Cache, err error) {
-	adapter, ok := adapters[adapterName]
+	instanceFunc, ok := adapters[adapterName]
 	if !ok {
 		err = fmt.Errorf("cache: unknown adapter name %q (forgot to import?)", adapterName)
 		return
 	}
+	adapter = instanceFunc()
 	err = adapter.StartAndGC(config)
 	if err != nil {
 		adapter = nil
