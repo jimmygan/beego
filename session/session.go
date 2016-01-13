@@ -20,7 +20,7 @@
 // )
 //
 //	func init() {
-//      globalSessions, _ = session.NewManager("memory", `{"cookieName":"gosessionid", "enableSetCookie,omitempty": true, "gclifetime":3600, "maxLifetime": 3600, "secure": false, "sessionIDHashFunc": "sha1", "sessionIDHashKey": "", "cookieLifeTime": 3600, "providerConfig": ""}`)
+//      globalSessions, _ = session.NewManager("memory", `{"cookieName":"gosessionid", "enableSetCookie,omitempty": true, "gclifetime":3600, "maxLifetime": 3600, "secure": false, "cookieLifeTime": 3600, "providerConfig": ""}`)
 //		go globalSessions.GC()
 //	}
 //
@@ -142,7 +142,7 @@ func NewManager(provideName, config string) (*Manager, error) {
 // otherwise return an valid session id.
 func (manager *Manager) getSid(r *http.Request) (string, error) {
 	cookie, errs := r.Cookie(manager.config.CookieName)
-	if errs != nil || cookie.Value == "" {
+	if errs != nil || cookie.Value == "" || cookie.MaxAge < 0 {
 		errs := r.ParseForm()
 		if errs != nil {
 			return "", errs
@@ -169,7 +169,7 @@ func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (se
 	}
 
 	// Generate a new session
-	sid, errs = manager.sessionID(r)
+	sid, errs = manager.sessionID()
 	if errs != nil {
 		return nil, errs
 	}
@@ -202,13 +202,16 @@ func (manager *Manager) SessionDestroy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	manager.provider.SessionDestroy(cookie.Value)
-	expiration := time.Now()
-	cookie = &http.Cookie{Name: manager.config.CookieName,
-		Path:     "/",
-		HttpOnly: true,
-		Expires:  expiration,
-		MaxAge:   -1}
-	http.SetCookie(w, cookie)
+	if manager.config.EnableSetCookie {
+		expiration := time.Now()
+		cookie = &http.Cookie{Name: manager.config.CookieName,
+			Path:     "/",
+			HttpOnly: true,
+			Expires:  expiration,
+			MaxAge:   -1}
+
+		http.SetCookie(w, cookie)
+	}
 }
 
 // GetSessionStore Get SessionStore by its id.
@@ -226,12 +229,12 @@ func (manager *Manager) GC() {
 
 // SessionRegenerateID Regenerate a session id for this SessionStore who's id is saving in http request.
 func (manager *Manager) SessionRegenerateID(w http.ResponseWriter, r *http.Request) (session Store) {
-	sid, err := manager.sessionID(r)
+	sid, err := manager.sessionID()
 	if err != nil {
 		return
 	}
 	cookie, err := r.Cookie(manager.config.CookieName)
-	if err != nil && cookie.Value == "" {
+	if err != nil || cookie.Value == "" {
 		//delete old cookie
 		session, _ = manager.provider.SessionRead(sid)
 		cookie = &http.Cookie{Name: manager.config.CookieName,
@@ -252,7 +255,9 @@ func (manager *Manager) SessionRegenerateID(w http.ResponseWriter, r *http.Reque
 		cookie.MaxAge = manager.config.CookieLifeTime
 		cookie.Expires = time.Now().Add(time.Duration(manager.config.CookieLifeTime) * time.Second)
 	}
-	http.SetCookie(w, cookie)
+	if manager.config.EnableSetCookie {
+		http.SetCookie(w, cookie)
+	}
 	r.AddCookie(cookie)
 	return
 }
@@ -267,7 +272,7 @@ func (manager *Manager) SetSecure(secure bool) {
 	manager.config.Secure = secure
 }
 
-func (manager *Manager) sessionID(r *http.Request) (string, error) {
+func (manager *Manager) sessionID() (string, error) {
 	b := make([]byte, manager.config.SessionIDLength)
 	n, err := rand.Read(b)
 	if n != len(b) || err != nil {

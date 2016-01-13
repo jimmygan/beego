@@ -37,11 +37,11 @@
 // }
 //
 // func (this *MainController) Get() {
-// 	this.TplNames = "index.tpl"
+// 	this.TplName = "index.tpl"
 // }
 //
 // func (this *MainController) Post() {
-// 	this.TplNames = "index.tpl"
+// 	this.TplName = "index.tpl"
 //
 // 	this.Data["Success"] = cpt.VerifyReq(this.Ctx.Request)
 // }
@@ -64,6 +64,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/cache"
@@ -78,7 +79,7 @@ var (
 const (
 	// default captcha attributes
 	challengeNums    = 6
-	expiration       = 600
+	expiration       = 600 * time.Second
 	fieldIDName      = "captcha_id"
 	fieldCaptchaName = "captcha"
 	cachePrefix      = "captcha_"
@@ -106,7 +107,7 @@ type Captcha struct {
 	ChallengeNums int
 
 	// captcha expiration seconds
-	Expiration int64
+	Expiration time.Duration
 
 	// cache key prefix
 	CachePrefix string
